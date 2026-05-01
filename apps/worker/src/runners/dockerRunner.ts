@@ -475,6 +475,66 @@ async function extractZip(build: Build, workspacePath: string): Promise<void> {
     await fs.promises.mkdir(path.dirname(destination), { recursive: true });
     await fs.promises.writeFile(destination, entry.getData());
   }
+
+  await flattenSingleTopLevelDirectory(build.id, workspacePath);
+}
+
+async function flattenSingleTopLevelDirectory(
+  buildId: string,
+  workspacePath: string
+): Promise<void> {
+  const entries = await fs.promises.readdir(workspacePath, { withFileTypes: true });
+  const meaningfulEntries = entries.filter((entry) => entry.name !== "__MACOSX");
+
+  if (meaningfulEntries.length !== 1 || !meaningfulEntries[0]?.isDirectory()) {
+    return;
+  }
+
+  const nestedRoot = path.join(workspacePath, meaningfulEntries[0].name);
+  const nestedEntries = await fs.promises.readdir(nestedRoot, { withFileTypes: true });
+
+  await appendBuildLog(
+    buildId,
+    "system",
+    `Flattening ZIP root directory ${meaningfulEntries[0].name}`
+  );
+
+  for (const entry of nestedEntries) {
+    const source = path.join(nestedRoot, entry.name);
+    const destination = path.join(workspacePath, entry.name);
+
+    if (!isPathInside(workspacePath, destination)) {
+      throw new Error(`Refusing unsafe flattened path: ${entry.name}`);
+    }
+
+    if (fs.existsSync(destination)) {
+      throw new Error(`Cannot flatten ZIP because ${entry.name} already exists`);
+    }
+
+    await fs.promises.rename(source, destination);
+  }
+
+  await fs.promises.rm(nestedRoot, { recursive: true, force: true });
+}
+
+function generateReactNativeBuildSpec(profile: BuildProfile): BuildSpec {
+  const effectiveProfile = profile === "release" ? "release" : "debug";
+  const gradleTask = effectiveProfile === "release" ? "assembleRelease" : "assembleDebug";
+  const artifactProfile = effectiveProfile === "release" ? "release" : "debug";
+  const bundleArtifacts =
+    effectiveProfile === "release" ? ["android/app/build/outputs/bundle/release/*.aab"] : [];
+
+  return {
+    name: `react-native-${profile}`,
+    timeoutMinutes: 30,
+    network: true,
+    environment: {},
+    steps: [
+      { name: "Install dependencies", run: "npm install" },
+      { name: "Build Android", run: `cd android && ./gradlew clean ${gradleTask}` }
+    ],
+    artifacts: [`android/app/build/outputs/apk/${artifactProfile}/*.apk`, ...bundleArtifacts]
+  };
 }
 
 async function resolveBuildSpec(build: Build, workspacePath: string): Promise<BuildSpec> {
@@ -497,11 +557,23 @@ async function resolveBuildSpec(build: Build, workspacePath: string): Promise<Bu
     }
   }
 
-  const buildSpec = generateDefaultBuildSpec(
-    asProjectType(build.projectType),
-    asBuildProfile(build.profile)
+  const projectType = asProjectType(build.projectType);
+  const profile = asBuildProfile(build.profile);
+  const hasReactNativeAndroidProject = fs.existsSync(
+    path.join(workspacePath, "android", "gradlew")
   );
-  await appendBuildLog(build.id, "system", "Using generated default buildspec");
+  const buildSpec =
+    projectType === "android-native" && hasReactNativeAndroidProject
+      ? generateReactNativeBuildSpec(profile)
+      : generateDefaultBuildSpec(projectType, profile);
+
+  await appendBuildLog(
+    build.id,
+    "system",
+    hasReactNativeAndroidProject && projectType === "android-native"
+      ? "Using generated React Native buildspec"
+      : "Using generated default buildspec"
+  );
   await prisma.build.update({
     where: { id: build.id },
     data: { buildSpecYaml: serializeBuildSpec(buildSpec) }

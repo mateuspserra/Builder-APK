@@ -13,22 +13,37 @@ const html = String.raw`<!doctype html>
         color: #15181d;
         background: #f6f8fb;
       }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
       body {
         margin: 0;
       }
       main {
-        max-width: 1180px;
+        width: min(1180px, calc(100vw - 32px));
+        height: 100dvh;
         margin: 0 auto;
-        padding: 28px;
+        padding: 18px 0;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
       }
       h1 {
-        margin: 0 0 22px;
-        font-size: 28px;
+        margin: 0 0 16px;
+        font-size: 27px;
+        line-height: 1.1;
+        flex: 0 0 auto;
       }
       .layout {
         display: grid;
-        grid-template-columns: 360px 1fr;
+        grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
         gap: 18px;
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
       }
       section,
       .panel {
@@ -36,12 +51,20 @@ const html = String.raw`<!doctype html>
         border: 1px solid #d9e0ea;
         border-radius: 8px;
         padding: 16px;
+        box-sizing: border-box;
+        min-width: 0;
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
       }
       label {
         display: block;
         font-size: 13px;
         font-weight: 650;
-        margin: 12px 0 6px;
+        margin: 10px 0 6px;
       }
       input,
       select,
@@ -60,7 +83,7 @@ const html = String.raw`<!doctype html>
         background: white;
       }
       textarea {
-        min-height: 94px;
+        min-height: 76px;
         resize: vertical;
       }
       .source-toggle {
@@ -86,7 +109,7 @@ const html = String.raw`<!doctype html>
         display: none;
       }
       button {
-        margin-top: 14px;
+        margin-top: 12px;
         border: 0;
         border-radius: 6px;
         padding: 10px 12px;
@@ -98,23 +121,54 @@ const html = String.raw`<!doctype html>
       table {
         width: 100%;
         border-collapse: collapse;
+        table-layout: fixed;
       }
       th,
       td {
         border-bottom: 1px solid #e5eaf1;
-        padding: 10px 8px;
+        padding: 9px 8px;
         text-align: left;
-        font-size: 13px;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      th:nth-child(1),
+      td:nth-child(1) {
+        width: 34%;
+      }
+      th:nth-child(2),
+      td:nth-child(2) {
+        width: 16%;
+      }
+      th:nth-child(3),
+      td:nth-child(3) {
+        width: 24%;
+      }
+      th:nth-child(4),
+      td:nth-child(4) {
+        width: 26%;
       }
       tr {
         cursor: pointer;
+      }
+      h2 {
+        flex: 0 0 auto;
+        margin: 14px 0 10px;
+        font-size: 22px;
+        line-height: 1.15;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       code,
       pre {
         font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
       }
       pre {
-        height: 360px;
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
         overflow: auto;
         padding: 12px;
         border: 1px solid #d9e0ea;
@@ -122,20 +176,47 @@ const html = String.raw`<!doctype html>
         background: #101418;
         color: #e9edf2;
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 12px;
+        line-height: 1.35;
+        margin: 0;
+      }
+      .panel {
+        flex: 0 0 auto;
+        max-height: 190px;
+        overflow: auto;
       }
       .actions {
         display: flex;
         gap: 8px;
+        min-width: 0;
       }
       .actions a {
         color: #165dff;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       @media (max-width: 860px) {
+        html,
+        body {
+          height: auto;
+          overflow: auto;
+        }
         main {
-          padding: 16px;
+          width: calc(100vw - 24px);
+          height: auto;
+          min-height: 100dvh;
+          padding: 14px 0;
         }
         .layout {
           grid-template-columns: 1fr;
+          min-height: auto;
+        }
+        section {
+          overflow: visible;
+        }
+        pre {
+          min-height: 320px;
         }
       }
     </style>

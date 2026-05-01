@@ -77,16 +77,19 @@ export async function buildRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
-    await appendSystemLog(build.id, "Build queued");
-    await buildQueue.add(
-      "build",
-      { buildId: build.id },
-      {
-        jobId: build.id,
-        removeOnComplete: { age: 86_400, count: 1_000 },
-        removeOnFail: { age: 86_400, count: 1_000 }
-      }
-    );
+    await appendSystemLog(build.id, `Build queued using ${config.queueMode} queue mode`);
+
+    if (config.queueMode === "redis") {
+      await buildQueue.add(
+        "build",
+        { buildId: build.id },
+        {
+          jobId: build.id,
+          removeOnComplete: { age: 86_400, count: 1_000 },
+          removeOnFail: { age: 86_400, count: 1_000 }
+        }
+      );
+    }
 
     return reply.code(201).send(toBuildDto(build));
   });
@@ -302,7 +305,7 @@ export async function buildRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send({ error: "build_already_finished", status: build.status });
     }
 
-    const job = await buildQueue.getJob(build.id);
+    const job = config.queueMode === "redis" ? await buildQueue.getJob(build.id) : null;
     if (job && build.status === "queued") {
       try {
         await job.remove();

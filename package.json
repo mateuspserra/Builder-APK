@@ -15,6 +15,7 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "test": "vitest run",
+    "db:init": "node scripts/init-sqlite.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init"
   },

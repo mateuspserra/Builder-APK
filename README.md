@@ -74,6 +74,66 @@ Também existe um script conveniente:
 bash scripts/dev.sh
 ```
 
+## Modo Local No Windows Sem Docker
+
+Se o PC não tiver Docker Desktop/WSL2 disponível, use o modo local. Ele mantém o modo Docker como padrão do projeto, mas permite testar neste Windows usando SQLite como fila e executando os steps diretamente no host.
+
+Esse modo é menos isolado: o código do app enviado roda no seu Windows. Use apenas com projetos seus.
+
+Instale pnpm no usuário:
+
+```powershell
+npm install -g pnpm@9.12.3
+```
+
+Baixe JDK 17 e Android SDK localmente:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows-local.ps1
+```
+
+O script cria `data/toolchains/windows`, instala:
+
+- Temurin JDK 17
+- Android command line tools
+- `platform-tools`
+- `platforms;android-35`
+- `build-tools;35.0.0`
+
+Ele também atualiza `.env`:
+
+```env
+QUEUE_MODE="sqlite"
+RUNNER_MODE="local"
+LOCAL_JAVA_HOME="data/toolchains/windows/jdk"
+LOCAL_ANDROID_HOME="data/toolchains/windows/android-sdk"
+LOCAL_BASH_PATH="C:/Program Files/Git/bin/bash.exe"
+```
+
+Inicialize o banco sem depender do schema engine do Prisma:
+
+```powershell
+pnpm db:init
+```
+
+Suba API e worker:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev-local-windows.ps1
+```
+
+Acesse:
+
+```text
+http://localhost:3000
+```
+
+Para parar, use os PIDs impressos pelo script:
+
+```powershell
+Stop-Process -Id API_PID,WORKER_PID
+```
+
 ## Docker Android Builder
 
 A imagem gerada se chama:

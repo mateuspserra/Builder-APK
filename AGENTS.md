@@ -117,6 +117,17 @@ pnpm build
 
 O worker precisa acessar o Docker CLI do host. O container de build recebe apenas o workspace montado em `/workspace`.
 
+## Modo Windows Local Sem Docker
+
+Este repositório também tem um fallback para ambiente Windows sem Docker/WSL2:
+
+- `QUEUE_MODE=sqlite`: a API cria builds no SQLite e o worker busca `queued` por polling.
+- `RUNNER_MODE=local`: o worker executa os steps no host, não em container.
+- `scripts/setup-windows-local.ps1`: baixa JDK 17 e Android SDK em `data/toolchains/windows`.
+- `scripts/dev-local-windows.ps1`: sobe API e worker em background.
+
+Esse modo existe para desenvolvimento local e não deve ser usado com código não confiável.
+
 ## Segurança
 
 Este MVP deve ser tratado como ferramenta privada/local. Builds executam código arbitrário do projeto enviado.

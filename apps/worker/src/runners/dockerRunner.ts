@@ -26,6 +26,7 @@ import { LineBuffer } from "./lineBuffer.js";
 type CommandResult = {
   exitCode: number;
   timedOut: boolean;
+  canceled?: boolean;
 };
 
 const validEnvNamePattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -170,6 +171,253 @@ async function stopContainer(buildId: string): Promise<void> {
     child.on("error", () => resolve());
     child.on("close", () => resolve());
   });
+}
+
+async function killProcessTree(pid: number): Promise<void> {
+  if (process.platform === "win32") {
+    await new Promise<void>((resolve) => {
+      const child = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true
+      });
+
+      child.on("error", () => resolve());
+      child.on("close", () => resolve());
+    });
+    return;
+  }
+
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      return;
+    }
+  }
+}
+
+function getProcessEnv(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string"
+    )
+  );
+}
+
+function splitPathList(value: string): string[] {
+  return value
+    .split(path.delimiter)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function buildLocalEnv(buildSpec: BuildSpec, env: Record<string, string>): Record<string, string> {
+  const baseEnv = getProcessEnv();
+  const userEnv = {
+    ...buildSpec.environment,
+    ...env
+  };
+  const validUserEnv = Object.fromEntries(
+    Object.entries(userEnv).filter(([name]) => validEnvNamePattern.test(name))
+  );
+  const localEnv: Record<string, string> = {
+    ...baseEnv,
+    ...validUserEnv,
+    CI: "true"
+  };
+
+  const javaHome = config.localJavaHome;
+  const androidHome = config.localAndroidHome;
+  const pathEntries = [
+    ...splitPathList(config.localPathExtra),
+    javaHome ? path.join(javaHome, "bin") : undefined,
+    androidHome ? path.join(androidHome, "platform-tools") : undefined,
+    androidHome ? path.join(androidHome, "cmdline-tools", "latest", "bin") : undefined,
+    androidHome ? path.join(androidHome, "build-tools", "35.0.0") : undefined,
+    localEnv.PATH ?? localEnv.Path ?? ""
+  ].filter((entry): entry is string => Boolean(entry));
+
+  if (javaHome) {
+    localEnv.JAVA_HOME = javaHome;
+  }
+
+  if (androidHome) {
+    localEnv.ANDROID_HOME = androidHome;
+    localEnv.ANDROID_SDK_ROOT = androidHome;
+  }
+
+  localEnv.PATH = pathEntries.join(path.delimiter);
+  localEnv.Path = localEnv.PATH;
+
+  return localEnv;
+}
+
+function resolveLocalShell(): { command: string; argsForStep: (step: string) => string[] } {
+  if (process.platform === "win32") {
+    const bashPath = config.localBashPath ?? "C:\\Program Files\\Git\\bin\\bash.exe";
+    if (fs.existsSync(bashPath)) {
+      return {
+        command: bashPath,
+        argsForStep: (step) => ["-lc", step]
+      };
+    }
+
+    return {
+      command: "powershell.exe",
+      argsForStep: (step) => ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", step]
+    };
+  }
+
+  return {
+    command: "bash",
+    argsForStep: (step) => ["-lc", step]
+  };
+}
+
+async function isBuildCanceled(buildId: string): Promise<boolean> {
+  const build = await prisma.build.findUnique({
+    where: { id: buildId },
+    select: { status: true }
+  });
+
+  return build?.status === "canceled";
+}
+
+async function runLocalStep(
+  buildId: string,
+  workspacePath: string,
+  step: string,
+  env: Record<string, string>,
+  timeoutMs: number
+): Promise<CommandResult> {
+  if (timeoutMs <= 0) {
+    return { exitCode: 1, timedOut: true };
+  }
+
+  const shell = resolveLocalShell();
+  let logChain = Promise.resolve();
+  let timedOut = false;
+  let canceled = false;
+  let checkingCancellation = false;
+
+  const enqueueLog = (stream: LogStream, line: string): void => {
+    logChain = logChain.then(() => appendRedactedLog(buildId, stream, line, env));
+  };
+
+  const child = spawn(shell.command, shell.argsForStep(step), {
+    cwd: workspacePath,
+    env,
+    windowsHide: true,
+    detached: process.platform !== "win32"
+  });
+
+  const stdout = new LineBuffer((line) => enqueueLog("stdout", line));
+  const stderr = new LineBuffer((line) => enqueueLog("stderr", line));
+
+  child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
+  child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    if (child.pid) {
+      void killProcessTree(child.pid);
+    }
+  }, timeoutMs);
+
+  const cancelInterval = setInterval(() => {
+    if (checkingCancellation) {
+      return;
+    }
+
+    checkingCancellation = true;
+    void isBuildCanceled(buildId)
+      .then((buildCanceled) => {
+        if (buildCanceled) {
+          canceled = true;
+          if (child.pid) {
+            void killProcessTree(child.pid);
+          }
+        }
+      })
+      .finally(() => {
+        checkingCancellation = false;
+      });
+  }, 1_000);
+
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => {
+      stdout.flush();
+      stderr.flush();
+      clearTimeout(timeout);
+      clearInterval(cancelInterval);
+      resolve(code ?? 1);
+    });
+  });
+
+  await logChain;
+  return { exitCode, timedOut, canceled };
+}
+
+async function runLocalBuild(
+  buildId: string,
+  workspacePath: string,
+  buildSpec: BuildSpec,
+  env: Record<string, string>
+): Promise<CommandResult> {
+  const localEnv = buildLocalEnv(buildSpec, env);
+  const invalidEnvNames = Object.keys({ ...buildSpec.environment, ...env }).filter(
+    (name) => !validEnvNamePattern.test(name)
+  );
+
+  for (const name of invalidEnvNames) {
+    await appendBuildLog(buildId, "system", `Skipping invalid environment variable name: ${name}`);
+  }
+
+  if (!config.localJavaHome && !process.env.JAVA_HOME) {
+    await appendBuildLog(
+      buildId,
+      "system",
+      "LOCAL_JAVA_HOME/JAVA_HOME is not set; local Android builds may fail"
+    );
+  }
+
+  if (!config.localAndroidHome && !process.env.ANDROID_HOME) {
+    await appendBuildLog(
+      buildId,
+      "system",
+      "LOCAL_ANDROID_HOME/ANDROID_HOME is not set; local Android builds may fail"
+    );
+  }
+
+  await appendBuildLog(buildId, "system", "Starting local host runner");
+
+  const startedAt = Date.now();
+  const timeoutMs = buildSpec.timeoutMinutes * 60 * 1000;
+
+  for (const [index, step] of buildSpec.steps.entries()) {
+    if (await isBuildCanceled(buildId)) {
+      return { exitCode: 130, timedOut: false, canceled: true };
+    }
+
+    const label = step.name ?? step.run;
+    await appendBuildLog(
+      buildId,
+      "system",
+      `Step ${index + 1}/${buildSpec.steps.length}: ${label}`
+    );
+
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    const result = await runLocalStep(buildId, workspacePath, step.run, localEnv, remainingMs);
+
+    if (result.timedOut || result.canceled || result.exitCode !== 0) {
+      return result;
+    }
+  }
+
+  return { exitCode: 0, timedOut: false };
 }
 
 async function cloneRepository(
@@ -445,7 +693,10 @@ export class DockerBuildRunner {
       }
 
       const buildSpec = await resolveBuildSpec(build, workspacePath);
-      const result = await runDockerBuild(build.id, workspacePath, buildSpec, env);
+      const result =
+        config.runnerMode === "local"
+          ? await runLocalBuild(build.id, workspacePath, buildSpec, env)
+          : await runDockerBuild(build.id, workspacePath, buildSpec, env);
 
       const current = await prisma.build.findUnique({
         where: { id: build.id },

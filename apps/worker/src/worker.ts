@@ -22,6 +22,59 @@ export async function startWorker(): Promise<void> {
   ensureStorageDirs();
   const runner = new DockerBuildRunner();
 
+  if (config.queueMode === "sqlite") {
+    let active = false;
+    const interval = setInterval(() => {
+      if (active) {
+        return;
+      }
+
+      active = true;
+      void prisma.build
+        .findFirst({
+          where: { status: "queued" },
+          orderBy: { createdAt: "asc" },
+          select: { id: true }
+        })
+        .then(async (build) => {
+          if (build) {
+            await runner.run(build.id);
+          }
+        })
+        .catch((error: unknown) => {
+          console.error(error);
+        })
+        .finally(() => {
+          active = false;
+        });
+    }, 2_000);
+
+    console.log(`Worker started with SQLite polling queue and ${config.runnerMode} runner mode`);
+
+    const shutdown = async (): Promise<void> => {
+      console.log("Stopping worker");
+      clearInterval(interval);
+      await prisma.$disconnect();
+      process.exit(0);
+    };
+
+    process.on("SIGINT", () => {
+      shutdown().catch((error: unknown) => {
+        console.error(error);
+        process.exit(1);
+      });
+    });
+
+    process.on("SIGTERM", () => {
+      shutdown().catch((error: unknown) => {
+        console.error(error);
+        process.exit(1);
+      });
+    });
+
+    return;
+  }
+
   const worker = createBuildWorker(async (job: Job) => {
     await runner.run(getBuildId(job));
   });
@@ -34,7 +87,9 @@ export async function startWorker(): Promise<void> {
     console.error(`Build job ${job?.id ?? "unknown"} failed: ${error.message}`);
   });
 
-  console.log(`Worker started with concurrency ${config.workerConcurrency}`);
+  console.log(
+    `Worker started with concurrency ${config.workerConcurrency} and ${config.runnerMode} runner mode`
+  );
 
   const shutdown = async (): Promise<void> => {
     console.log("Stopping worker");

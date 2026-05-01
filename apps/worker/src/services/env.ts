@@ -22,9 +22,15 @@ export const config = {
   uploadsDir: resolveDataPath("uploads"),
   artifactsDir: resolveDataPath("artifacts"),
   workspacesDir: resolveDataPath("workspaces"),
+  queueMode: process.env.QUEUE_MODE === "sqlite" ? "sqlite" : "redis",
+  runnerMode: process.env.RUNNER_MODE === "local" ? "local" : "docker",
   dockerImage: process.env.DOCKER_IMAGE ?? DEFAULT_DOCKER_IMAGE,
   buildMemory: process.env.BUILD_MEMORY ?? DEFAULT_BUILD_MEMORY,
   buildCpus: process.env.BUILD_CPUS ?? DEFAULT_BUILD_CPUS,
+  localJavaHome: process.env.LOCAL_JAVA_HOME ?? process.env.JAVA_HOME,
+  localAndroidHome: process.env.LOCAL_ANDROID_HOME ?? process.env.ANDROID_HOME,
+  localBashPath: process.env.LOCAL_BASH_PATH,
+  localPathExtra: process.env.LOCAL_PATH_EXTRA ?? "",
   workerConcurrency: Number(process.env.WORKER_CONCURRENCY ?? "1")
 };
 

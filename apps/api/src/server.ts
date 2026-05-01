@@ -8,6 +8,7 @@ import { buildQueue } from "./services/queue.js";
 import { buildRoutes } from "./routes/builds.js";
 import { uploadRoutes } from "./routes/uploads.js";
 import { uiRoutes } from "./routes/ui.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 
 function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
@@ -46,8 +47,29 @@ export async function buildServer() {
     bodyLimit: 2 * 1024 * 1024
   });
 
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, body, done) => {
+    const rawBody = Buffer.isBuffer(body) ? body : Buffer.from(body);
+    (request as typeof request & { rawBody?: Buffer }).rawBody = rawBody;
+
+    if (rawBody.length === 0) {
+      done(null, {});
+      return;
+    }
+
+    try {
+      done(null, JSON.parse(rawBody.toString("utf8")));
+    } catch (error) {
+      done(error as Error);
+    }
+  });
+
   if (config.basicAuthUser && config.basicAuthPassword) {
     app.addHook("onRequest", async (request, reply) => {
+      if (isGitHubWebhookRequest(request.url) && config.githubWebhookSecret) {
+        return;
+      }
+
       const credentials = parseBasicAuth(request.headers.authorization);
       const authorized =
         credentials &&
@@ -70,6 +92,7 @@ export async function buildServer() {
 
   await app.register(uiRoutes);
   await app.register(uploadRoutes);
+  await app.register(webhookRoutes);
   await app.register(buildRoutes);
 
   app.setErrorHandler((error, _request, reply) => {
@@ -86,6 +109,10 @@ export async function buildServer() {
   });
 
   return app;
+}
+
+function isGitHubWebhookRequest(url: string): boolean {
+  return url.split("?")[0] === "/webhooks/github";
 }
 
 async function start(): Promise<void> {

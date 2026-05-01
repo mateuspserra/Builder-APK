@@ -85,6 +85,54 @@ BASIC_AUTH_PASSWORD="troque-esta-senha"
 
 Quando essas duas variáveis estiverem preenchidas, a API inteira fica protegida por HTTP Basic Auth. O navegador vai pedir usuário e senha ao acessar `GET /`.
 
+`POST /webhooks/github` fica fora do Basic Auth quando `GITHUB_WEBHOOK_SECRET` estiver configurado, porque o GitHub não envia credenciais Basic Auth. A proteção desse endpoint é feita por assinatura HMAC `X-Hub-Signature-256`.
+
+## Webhook GitHub Para Build Automático
+
+Configure o `.env` da VM:
+
+```env
+GITHUB_WEBHOOK_SECRET="um-segredo-grande"
+GITHUB_WEBHOOK_BRANCH="main"
+GITHUB_WEBHOOK_PROJECT_TYPE="android-native"
+GITHUB_WEBHOOK_PROFILE="debug"
+GITHUB_WEBHOOK_ALLOWED_REPOS="https://github.com/seu-usuario/seu-repo"
+GITHUB_WEBHOOK_ENV_JSON="{}"
+```
+
+Campos:
+
+- `GITHUB_WEBHOOK_SECRET`: segredo usado no webhook do GitHub. Obrigatório para ativar o endpoint.
+- `GITHUB_WEBHOOK_BRANCH`: branch que dispara build. Default `main`.
+- `GITHUB_WEBHOOK_PROJECT_TYPE`: `android-native` ou `expo`.
+- `GITHUB_WEBHOOK_PROFILE`: `debug`, `release` ou `custom`.
+- `GITHUB_WEBHOOK_ALLOWED_REPOS`: lista separada por vírgula. Se ficar vazio, qualquer repositório com assinatura válida será aceito.
+- `GITHUB_WEBHOOK_BUILD_SPEC`: buildspec YAML inline opcional. Se vazio, o worker usa `buildspec.yml` do repo ou o default.
+- `GITHUB_WEBHOOK_ENV_JSON`: variáveis de ambiente do build em JSON.
+
+No GitHub, abra o repositório do app e configure:
+
+- `Settings` -> `Webhooks` -> `Add webhook`
+- `Payload URL`: `https://SEU_DOMINIO/webhooks/github`
+- `Content type`: `application/json`
+- `Secret`: mesmo valor de `GITHUB_WEBHOOK_SECRET`
+- `Which events`: `Just the push event`
+- `Active`: ligado
+
+A cada push na branch configurada, o builder cria um build com source Git usando o `clone_url` do repositório recebido no payload. Eventos de outras branches, tags, refs deletadas ou repositórios fora da allowlist são ignorados com HTTP `202`.
+
+Para testar localmente a assinatura:
+
+```bash
+BODY='{"ref":"refs/heads/main","repository":{"clone_url":"https://github.com/seu-usuario/seu-repo.git","full_name":"seu-usuario/seu-repo"},"after":"teste"}'
+SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac 'um-segredo-grande' -hex | sed 's/^.* //')"
+curl -X POST http://localhost:3000/webhooks/github \
+  -H "Content-Type: application/json" \
+  -H "X-GitHub-Event: push" \
+  -H "X-Hub-Signature-256: $SIG" \
+  -d "$BODY"
+```
+
 ## Modo Local No Windows Sem Docker
 
 Se o PC não tiver Docker Desktop/WSL2 disponível, use o modo local. Ele mantém o modo Docker como padrão do projeto, mas permite testar neste Windows usando SQLite como fila e executando os steps diretamente no host.
@@ -329,6 +377,7 @@ O runner mascara logs de variáveis cujo nome contenha `SECRET`, `TOKEN`, `PASSW
 Endpoints implementados:
 
 - `POST /uploads`
+- `POST /webhooks/github`
 - `POST /builds`
 - `GET /builds`
 - `GET /builds/:id`
@@ -359,7 +408,7 @@ O isolamento atual é Docker básico. Ele reduz o blast radius, mas não equival
 - Sem autenticação.
 - Sem multiusuário.
 - Sem cache Gradle/npm.
-- Sem webhooks GitHub/GitLab.
+- Webhook GitHub simples para evento `push`; sem GitLab ainda.
 - Sem runners distribuídos.
 - Sem integração Firebase App Distribution ou Play Console.
 - Cancelamento de build em execução depende de `docker stop` no container nomeado.

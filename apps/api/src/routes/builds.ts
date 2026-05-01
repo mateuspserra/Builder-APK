@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
   canTransitionBuildStatus,
@@ -20,16 +19,11 @@ import { prisma } from "../services/prisma.js";
 import { buildQueue } from "../services/queue.js";
 import { stopBuildContainer } from "../services/docker.js";
 import { toBuildDto } from "../services/buildDto.js";
-
-async function appendSystemLog(buildId: string, line: string): Promise<void> {
-  await prisma.buildLog.create({
-    data: {
-      buildId,
-      stream: "system",
-      line
-    }
-  });
-}
+import {
+  appendSystemLog,
+  assertBuildSourceExists,
+  createQueuedBuild
+} from "../services/buildRequests.js";
 
 async function markBuildCanceled(buildId: string, status: BuildStatus): Promise<void> {
   if (!canTransitionBuildStatus(status, "canceled")) {
@@ -55,41 +49,17 @@ export async function buildRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: "invalid_build_request", details: parsed.error.flatten() });
     }
 
-    const input = parsed.data;
-    if (input.source.type === "zip") {
-      const uploadPath = path.join(config.uploadsDir, `${input.source.uploadId}.zip`);
-      if (!fs.existsSync(uploadPath)) {
+    try {
+      assertBuildSourceExists(parsed.data.source);
+    } catch (error) {
+      if (error instanceof Error && error.message === "upload_not_found") {
         return reply.code(400).send({ error: "upload_not_found" });
       }
+
+      throw error;
     }
 
-    const build = await prisma.build.create({
-      data: {
-        status: "queued",
-        sourceType: input.source.type,
-        repoUrl: input.source.type === "git" ? input.source.repoUrl : null,
-        branch: input.source.type === "git" ? input.source.branch : null,
-        uploadId: input.source.type === "zip" ? input.source.uploadId : null,
-        projectType: input.projectType,
-        profile: input.profile,
-        buildSpecYaml: input.buildSpec ?? null,
-        envJson: JSON.stringify(input.env)
-      }
-    });
-
-    await appendSystemLog(build.id, `Build queued using ${config.queueMode} queue mode`);
-
-    if (config.queueMode === "redis") {
-      await buildQueue.add(
-        "build",
-        { buildId: build.id },
-        {
-          jobId: build.id,
-          removeOnComplete: { age: 86_400, count: 1_000 },
-          removeOnFail: { age: 86_400, count: 1_000 }
-        }
-      );
-    }
+    const build = await createQueuedBuild(parsed.data);
 
     return reply.code(201).send(toBuildDto(build));
   });

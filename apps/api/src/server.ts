@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { timingSafeEqual } from "node:crypto";
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import { ensureStorageDirs, config } from "./services/env.js";
@@ -8,6 +9,35 @@ import { buildRoutes } from "./routes/builds.js";
 import { uploadRoutes } from "./routes/uploads.js";
 import { uiRoutes } from "./routes/ui.js";
 
+function safeEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function parseBasicAuth(header: string | undefined): { user: string; password: string } | null {
+  if (!header?.startsWith("Basic ")) {
+    return null;
+  }
+
+  const decoded = Buffer.from(header.slice("Basic ".length), "base64").toString("utf8");
+  const separator = decoded.indexOf(":");
+
+  if (separator === -1) {
+    return null;
+  }
+
+  return {
+    user: decoded.slice(0, separator),
+    password: decoded.slice(separator + 1)
+  };
+}
+
 export async function buildServer() {
   ensureStorageDirs();
 
@@ -15,6 +45,21 @@ export async function buildServer() {
     logger: true,
     bodyLimit: 2 * 1024 * 1024
   });
+
+  if (config.basicAuthUser && config.basicAuthPassword) {
+    app.addHook("onRequest", async (request, reply) => {
+      const credentials = parseBasicAuth(request.headers.authorization);
+      const authorized =
+        credentials &&
+        safeEqual(credentials.user, config.basicAuthUser) &&
+        safeEqual(credentials.password, config.basicAuthPassword);
+
+      if (!authorized) {
+        reply.header("WWW-Authenticate", 'Basic realm="APK Builder"');
+        return reply.code(401).send({ error: "unauthorized" });
+      }
+    });
+  }
 
   await app.register(multipart, {
     limits: {

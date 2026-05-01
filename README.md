@@ -74,6 +74,17 @@ Também existe um script conveniente:
 bash scripts/dev.sh
 ```
 
+## Autenticação Básica
+
+Para expor a API fora da máquina local, configure login e senha no `.env`:
+
+```env
+BASIC_AUTH_USER="admin"
+BASIC_AUTH_PASSWORD="troque-esta-senha"
+```
+
+Quando essas duas variáveis estiverem preenchidas, a API inteira fica protegida por HTTP Basic Auth. O navegador vai pedir usuário e senha ao acessar `GET /`.
+
 ## Modo Local No Windows Sem Docker
 
 Se o PC não tiver Docker Desktop/WSL2 disponível, use o modo local. Ele mantém o modo Docker como padrão do projeto, mas permite testar neste Windows usando SQLite como fila e executando os steps diretamente no host.

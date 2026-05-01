@@ -14,6 +14,8 @@ if (!process.env.DATABASE_URL) {
 export const config = {
   host: process.env.API_HOST ?? "0.0.0.0",
   port: Number(process.env.API_PORT ?? "3000"),
+  basicAuthUser: process.env.BASIC_AUTH_USER ?? "",
+  basicAuthPassword: process.env.BASIC_AUTH_PASSWORD ?? "",
   queueMode: process.env.QUEUE_MODE === "sqlite" ? "sqlite" : "redis",
   uploadsDir: resolveDataPath("uploads"),
   artifactsDir: resolveDataPath("artifacts"),

@@ -63,6 +63,28 @@ const html = String.raw`<!doctype html>
         min-height: 94px;
         resize: vertical;
       }
+      .source-toggle {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .source-toggle label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        border: 1px solid #c8d2df;
+        border-radius: 6px;
+        padding: 9px 10px;
+        cursor: pointer;
+      }
+      .source-toggle input {
+        width: auto;
+      }
+      .hidden {
+        display: none;
+      }
       button {
         margin-top: 14px;
         border: 0;
@@ -124,10 +146,26 @@ const html = String.raw`<!doctype html>
       <div class="layout">
         <section>
           <form id="build-form">
-            <label for="repoUrl">Git repository</label>
-            <input id="repoUrl" name="repoUrl" required placeholder="https://github.com/user/app.git" />
-            <label for="branch">Branch</label>
-            <input id="branch" name="branch" value="main" />
+            <div class="source-toggle">
+              <label>
+                <input type="radio" name="sourceType" value="git" checked />
+                Git
+              </label>
+              <label>
+                <input type="radio" name="sourceType" value="zip" />
+                ZIP
+              </label>
+            </div>
+            <div id="git-fields">
+              <label for="repoUrl">Git repository</label>
+              <input id="repoUrl" name="repoUrl" placeholder="https://github.com/user/app.git" />
+              <label for="branch">Branch</label>
+              <input id="branch" name="branch" value="main" />
+            </div>
+            <div id="zip-fields" class="hidden">
+              <label for="zipFile">ZIP file</label>
+              <input id="zipFile" name="zipFile" type="file" accept=".zip,application/zip,application/x-zip-compressed" />
+            </div>
             <label for="projectType">Project type</label>
             <select id="projectType" name="projectType">
               <option value="android-native">Android native</option>
@@ -166,7 +204,21 @@ const html = String.raw`<!doctype html>
     <script>
       const tbody = document.querySelector("#builds");
       const logs = document.querySelector("#logs");
+      const gitFields = document.querySelector("#git-fields");
+      const zipFields = document.querySelector("#zip-fields");
       let stream;
+
+      function selectedSourceType() {
+        return document.querySelector('input[name="sourceType"]:checked').value;
+      }
+
+      document.querySelectorAll('input[name="sourceType"]').forEach((input) => {
+        input.addEventListener("change", () => {
+          const isZip = selectedSourceType() === "zip";
+          gitFields.classList.toggle("hidden", isZip);
+          zipFields.classList.toggle("hidden", !isZip);
+        });
+      });
 
       async function loadBuilds() {
         const response = await fetch("/builds?limit=20");
@@ -205,12 +257,43 @@ const html = String.raw`<!doctype html>
       document.querySelector("#build-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
-        const payload = {
-          source: {
+        const sourceType = selectedSourceType();
+        let source;
+
+        if (sourceType === "zip") {
+          const file = form.get("zipFile");
+          if (!file || !(file instanceof File) || file.size === 0) {
+            logs.textContent = "Select a ZIP file.";
+            return;
+          }
+
+          const uploadForm = new FormData();
+          uploadForm.set("file", file);
+          const uploadResponse = await fetch("/uploads", {
+            method: "POST",
+            body: uploadForm
+          });
+
+          const upload = await uploadResponse.json();
+          if (!uploadResponse.ok) {
+            logs.textContent = JSON.stringify(upload, null, 2);
+            return;
+          }
+
+          source = {
+            type: "zip",
+            uploadId: upload.uploadId
+          };
+        } else {
+          source = {
             type: "git",
             repoUrl: form.get("repoUrl"),
             branch: form.get("branch") || "main"
-          },
+          };
+        }
+
+        const payload = {
+          source,
           projectType: form.get("projectType"),
           profile: form.get("profile")
         };
@@ -222,6 +305,10 @@ const html = String.raw`<!doctype html>
           body: JSON.stringify(payload)
         });
         const build = await response.json();
+        if (!response.ok) {
+          logs.textContent = JSON.stringify(build, null, 2);
+          return;
+        }
         await loadBuilds();
         if (build.id) streamLogs(build.id);
       });

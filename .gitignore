@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+coverage/
+data/*
+!data/.gitkeep
+!data/artifacts/.gitkeep
+!data/workspaces/.gitkeep
+!data/uploads/.gitkeep
+*.log
+*.tsbuildinfo
+.DS_Store

@@ -1,0 +1,11 @@
+name: android-debug
+timeoutMinutes: 30
+network: true
+environment:
+  JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+steps:
+  - name: Build APK
+    run: ./gradlew clean assembleDebug
+artifacts:
+  - app/build/outputs/apk/debug/*.apk
+  - "**/build/outputs/apk/debug/*.apk"

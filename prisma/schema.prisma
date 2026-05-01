@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Build {
+  id            String     @id @default(cuid())
+  status        String
+  sourceType    String
+  repoUrl       String?
+  branch        String?
+  uploadId      String?
+  projectType   String
+  profile       String
+  buildSpecYaml String?
+  envJson       String     @default("{}")
+  createdAt     DateTime   @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  exitCode      Int?
+  errorMessage  String?
+  workspacePath String?
+  logs          BuildLog[]
+  artifacts     Artifact[]
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model BuildLog {
+  id        Int      @id @default(autoincrement())
+  buildId   String
+  timestamp DateTime @default(now())
+  stream    String
+  line      String
+  build     Build    @relation(fields: [buildId], references: [id], onDelete: Cascade)
+
+  @@index([buildId, id])
+}
+
+model Artifact {
+  id        String   @id @default(cuid())
+  buildId   String
+  filename  String
+  path      String
+  sizeBytes Int
+  mimeType  String
+  createdAt DateTime @default(now())
+  build     Build    @relation(fields: [buildId], references: [id], onDelete: Cascade)
+
+  @@index([buildId])
+}

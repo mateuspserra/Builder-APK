@@ -1,0 +1,23 @@
+{
+  "name": "worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/worker.js",
+  "scripts": {
+    "dev": "tsx --conditions development src/worker.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/worker.js"
+  },
+  "dependencies": {
+    "@apk-builder/shared": "workspace:*",
+    "@prisma/client": "^6.19.3",
+    "adm-zip": "^0.5.16",
+    "bullmq": "^5.21.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^20.17.6"
+  }
+}

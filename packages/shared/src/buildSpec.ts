@@ -48,12 +48,12 @@ export function generateDefaultBuildSpec(
       timeoutMinutes: DEFAULT_BUILD_TIMEOUT_MINUTES,
       network: true,
       environment: {},
-      steps: [{ run: "./gradlew clean assembleRelease" }],
+      steps: [{ run: "./gradlew clean assembleRelease bundleRelease" }],
       artifacts: [
-        "app/build/outputs/apk/release/*.apk",
-        "**/build/outputs/apk/release/*.apk",
         "app/build/outputs/bundle/release/*.aab",
-        "**/build/outputs/bundle/release/*.aab"
+        "**/build/outputs/bundle/release/*.aab",
+        "app/build/outputs/apk/release/*.apk",
+        "**/build/outputs/apk/release/*.apk"
       ]
     };
   }
@@ -78,11 +78,13 @@ export function generateDefaultBuildSpec(
       steps: [
         { run: "npm ci" },
         { run: "npx expo prebuild --platform android" },
-        { run: "cd android && ./gradlew clean assembleRelease" }
+        { run: "cd android && ./gradlew clean assembleRelease bundleRelease" }
       ],
       artifacts: [
+        "android/app/build/outputs/bundle/release/*.aab",
+        "android/**/build/outputs/bundle/release/*.aab",
         "android/app/build/outputs/apk/release/*.apk",
-        "android/app/build/outputs/bundle/release/*.aab"
+        "android/**/build/outputs/apk/release/*.apk"
       ]
     };
   }

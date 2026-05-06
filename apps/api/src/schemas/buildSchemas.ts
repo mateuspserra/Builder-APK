@@ -22,7 +22,7 @@ export const createBuildRequestSchema = z
   .object({
     source: z.discriminatedUnion("type", [gitSourceSchema, zipSourceSchema]),
     projectType: z.enum(projectTypes),
-    profile: z.enum(buildProfiles),
+    profile: z.enum(buildProfiles).default("release"),
     buildSpec: z.string().min(1).optional(),
     env: envSchema.default({})
   })

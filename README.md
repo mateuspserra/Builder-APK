@@ -95,7 +95,7 @@ Configure o `.env` da VM:
 GITHUB_WEBHOOK_SECRET="um-segredo-grande"
 GITHUB_WEBHOOK_BRANCH="main"
 GITHUB_WEBHOOK_PROJECT_TYPE="android-native"
-GITHUB_WEBHOOK_PROFILE="debug"
+GITHUB_WEBHOOK_PROFILE="release"
 GITHUB_WEBHOOK_ALLOWED_REPOS="https://github.com/seu-usuario/seu-repo"
 GITHUB_WEBHOOK_ENV_JSON="{}"
 ```
@@ -105,7 +105,7 @@ Campos:
 - `GITHUB_WEBHOOK_SECRET`: segredo usado no webhook do GitHub. Obrigatório para ativar o endpoint.
 - `GITHUB_WEBHOOK_BRANCH`: branch que dispara build. Default `main`.
 - `GITHUB_WEBHOOK_PROJECT_TYPE`: `android-native` ou `expo`.
-- `GITHUB_WEBHOOK_PROFILE`: `debug`, `release` ou `custom`.
+- `GITHUB_WEBHOOK_PROFILE`: `release` por padrao para gerar AAB de Play Store; tambem aceita `debug` ou `custom`.
 - `GITHUB_WEBHOOK_ALLOWED_REPOS`: lista separada por vírgula. Se ficar vazio, qualquer repositório com assinatura válida será aceito.
 - `GITHUB_WEBHOOK_BUILD_SPEC`: buildspec YAML inline opcional. Se vazio, o worker usa `buildspec.yml` do repo ou o default.
 - `GITHUB_WEBHOOK_ENV_JSON`: variáveis de ambiente do build em JSON.
@@ -120,6 +120,24 @@ No GitHub, abra o repositório do app e configure:
 - `Active`: ligado
 
 A cada push na branch configurada, o builder cria um build com source Git usando o `clone_url` do repositório recebido no payload. Eventos de outras branches, tags, refs deletadas ou repositórios fora da allowlist são ignorados com HTTP `202`.
+
+## Builds Para Google Play
+
+O perfil padrao do builder e `release`. Builds `release` executam `assembleRelease` e `bundleRelease`, salvando primeiro o `.aab` e tambem o `.apk` release quando o projeto gerar ambos.
+
+Para publicar na Play Store, use o artifact `.aab`. O `.apk` release continua util para testes diretos, mas o formato de publicacao do Google Play e o Android App Bundle.
+
+Projetos que precisam de assinatura propria devem fornecer as variaveis de keystore pelo `GITHUB_WEBHOOK_ENV_JSON`, `env` da API ou por `buildspec.yml` controlado pelo repo do app.
+
+## Retencao De Workspaces
+
+Workspaces antigos podem crescer rapido porque cada build carrega Gradle, Android e `node_modules`. Use o script:
+
+```bash
+WORKSPACE_KEEP_DAYS=2 WORKSPACE_KEEP_RECENT_COUNT=1 bash scripts/clean-workspaces.sh
+```
+
+Ele preserva os workspaces mais recentes e remove apenas diretorios antigos em `data/workspaces`. Artifacts em `data/artifacts` nao sao apagados por esse script.
 
 Para testar localmente a assinatura:
 

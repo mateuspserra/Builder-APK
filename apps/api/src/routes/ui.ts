@@ -254,8 +254,8 @@ const html = String.raw`<!doctype html>
             </select>
             <label for="profile">Profile</label>
             <select id="profile" name="profile">
+              <option value="release" selected>Release Play Store AAB</option>
               <option value="debug">Debug</option>
-              <option value="release">Release</option>
               <option value="custom">Custom</option>
             </select>
             <label for="buildSpec">Inline buildspec YAML</label>

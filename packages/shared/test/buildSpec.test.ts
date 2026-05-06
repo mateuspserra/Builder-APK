@@ -48,7 +48,7 @@ describe("default buildspec generation", () => {
     expect(spec.steps.map((step) => step.run)).toEqual([
       "npm ci",
       "npx expo prebuild --platform android",
-      "cd android && ./gradlew clean assembleRelease"
+      "cd android && ./gradlew clean assembleRelease bundleRelease"
     ]);
     expect(spec.artifacts).toContain("android/app/build/outputs/bundle/release/*.aab");
   });

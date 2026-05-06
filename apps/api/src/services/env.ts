@@ -48,7 +48,7 @@ function parseProjectType(value: string | undefined): ProjectType {
 }
 
 function parseBuildProfile(value: string | undefined): BuildProfile {
-  return buildProfiles.includes(value as BuildProfile) ? (value as BuildProfile) : "debug";
+  return buildProfiles.includes(value as BuildProfile) ? (value as BuildProfile) : "release";
 }
 
 function parseCsv(value: string | undefined): string[] {

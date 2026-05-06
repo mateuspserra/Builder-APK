@@ -1,0 +1,8 @@
+[Unit]
+Description=APK Builder workspace retention
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/apk-builder
+EnvironmentFile=-/opt/apk-builder/.env
+ExecStart=/usr/bin/bash /opt/apk-builder/scripts/clean-workspaces.sh

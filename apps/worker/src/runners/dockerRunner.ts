@@ -519,7 +519,7 @@ async function flattenSingleTopLevelDirectory(
 
 function generateReactNativeBuildSpec(profile: BuildProfile): BuildSpec {
   const effectiveProfile = profile === "release" ? "release" : "debug";
-  const gradleTask = effectiveProfile === "release" ? "assembleRelease" : "assembleDebug";
+  const gradleTask = effectiveProfile === "release" ? "assembleRelease bundleRelease" : "assembleDebug";
   const artifactProfile = effectiveProfile === "release" ? "release" : "debug";
   const bundleArtifacts =
     effectiveProfile === "release" ? ["android/app/build/outputs/bundle/release/*.aab"] : [];

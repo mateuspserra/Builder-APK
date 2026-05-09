@@ -134,10 +134,14 @@ Projetos que precisam de assinatura propria devem fornecer as variaveis de keyst
 Workspaces antigos podem crescer rapido porque cada build carrega Gradle, Android e `node_modules`. Use o script:
 
 ```bash
-WORKSPACE_KEEP_DAYS=2 WORKSPACE_KEEP_RECENT_COUNT=1 bash scripts/clean-workspaces.sh
+WORKSPACE_KEEP_DAYS=2 \
+WORKSPACE_KEEP_RECENT_COUNT=1 \
+WORKSPACE_MAX_COUNT=1 \
+WORKSPACE_MAX_TOTAL_MB=4096 \
+bash scripts/clean-workspaces.sh
 ```
 
-Ele preserva os workspaces mais recentes e remove apenas diretorios antigos em `data/workspaces`. Artifacts em `data/artifacts` nao sao apagados por esse script.
+Ele preserva os workspaces mais recentes e remove diretorios em `data/workspaces` por idade, quantidade e tamanho total. Para a VM mensal, a configuracao recomendada e manter apenas o ultimo workspace util (`WORKSPACE_KEEP_RECENT_COUNT=1` e `WORKSPACE_MAX_COUNT=1`). Artifacts em `data/artifacts` nao sao apagados por esse script.
 
 Para testar localmente a assinatura:
 
